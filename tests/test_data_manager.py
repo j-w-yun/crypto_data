@@ -8,33 +8,30 @@ import util
 
 if __name__ == '__main__':
     # DataManager instance will download and fetch trade and chart data
-    dm = DataManager(exchange_clients=datalist.EXCHANGE_CLIENTS,
-                     exchange_pairs=datalist.EXCHANGE_PAIRS)
+    dm = DataManager(datalist.EXCHANGE_CLIENTS, datalist.EXCHANGE_PAIRS)
 
-    # start date of data
-    date_dict = {'year': 2016, 'month': 8, 'day': 1, 'hour': 0, 'minute': 0}
-    start_date = util.dict_to_utc_date(date_dict)
-    start_unix = util.utc_date_to_unix(start_date)
-    # end date of data
-    date_dict = {'year': 2016, 'month': 8, 'day': 1, 'hour': 3, 'minute': 0}
-    end_date = util.dict_to_utc_date(date_dict)
-    end_unix = util.utc_date_to_unix(end_date)
-    # show start and end unix of data to fetch
-    print('Start UNIX: {}'.format(start_unix))
-    print('End UNIX: {}\n'.format(end_unix))
+    # start UNIX of data
+    date_dict = {'year': 2018, 'month': 5, 'day': 1, 'hour': 0, 'minute': 0}
+    start = util.local_date_to_unix(util.dict_to_local_date(date_dict))
+    print('Start UNIX: {}'.format(start))
+
+    # end UNIX of data
+    date_dict = {'year': 2018, 'month': 5, 'day': 2, 'hour': 0, 'minute': 0}
+    end = util.local_date_to_unix(util.dict_to_local_date(date_dict))
+    print('End UNIX: {}\n'.format(end))
 
     # download if not present on disk and fetch charts
     # both trade and chart data fetched through DataManager is a list of dict,
     # ordered from oldest data to newest data
-    gdax_data = dm.get_charts('gdax', 'BTC-USD', start_unix, end_unix, 60)
-    krak_data = dm.get_charts('kraken', 'XXBTZUSD', start_unix, end_unix, 60)
-    polo_data = dm.get_charts('poloniex', 'USDT_BTC', start_unix, end_unix, 60)
+    gdax_btc_data = dm.get_charts('gdax', 'BTC-USD', start, end, 900)
+    krak_btc_data = dm.get_charts('kraken', 'XXBTZUSD', start, end, 900)
+    polo_btc_data = dm.get_charts('poloniex', 'USDT_BTC', start, end, 900)
 
     # plot chart data as OHLC
     data = {
-        'GDAX': gdax_data,
-        'Kraken': krak_data,
-        'Poloniex': polo_data
+        'GDAX': gdax_btc_data,
+        'Kraken': krak_btc_data,
+        'Poloniex': polo_btc_data
     }
     fig, axarr = plt.subplots(len(data), 1, figsize=(10, 8))
     axarr = axarr.flatten()
@@ -47,10 +44,10 @@ if __name__ == '__main__':
             lows.append(row['low'])
             closes.append(row['close'])
         candlestick2_ohlc(ax=ax,
-                          opens=opens[5:],
-                          highs=highs[5:],
-                          lows=lows[5:],
-                          closes=closes[5:],
+                          opens=opens[2:],
+                          highs=highs[2:],
+                          lows=lows[2:],
+                          closes=closes[2:],
                           width=0.6, colorup='green', colordown='red')
     fig.canvas.draw()
     plt.pause(1e9)

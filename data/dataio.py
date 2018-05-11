@@ -15,6 +15,7 @@ class DataIO:
         return self._fieldnames
 
     def _make_savedir(self):
+        """Create directory if it does not exist."""
         if not os.path.exists(self._savedir):
             try:
                 os.makedirs(self._savedir)
@@ -22,16 +23,21 @@ class DataIO:
                 pass
 
     def csv_newfile(self, filename):
+        """Create a new file and write header.
+
+        Args:
+            filename (str): Name of file.
+        """
         with open('{}\\{}.csv'.format(self._savedir, filename), 'w', newline='') as f:
             w = csv.DictWriter(f, fieldnames=self.fieldnames)
             w.writeheader()
 
     def csv_check(self, filename):
-        """Checks if file is present. If not, creates a new file and writes
-        header.
+        """Check if file is present. If file is not present, create a new file
+        and write header.
 
         Args:
-            filename(str): Name of file.
+            filename (str): Name of file.
 
         Returns:
             True: If file exists.
@@ -45,6 +51,12 @@ class DataIO:
         return False
 
     def csv_append(self, filename, data):
+        """Append a dict or a row of dicts to the last line of file.
+
+        Args:
+            filename (str): Name of file.
+            data (dict or list of dict): Data to write to file.
+        """
         with open('{}\\{}.csv'.format(self._savedir, filename), 'a', newline='') as f:
             w = csv.DictWriter(f, fieldnames=self.fieldnames)
             if len(numpy.shape(data)) > 0:
@@ -53,16 +65,38 @@ class DataIO:
             else:
                 w.writerow(data)
 
-    def csv_get(self, filename, fmt_str=None):
+    def csv_get(self, filename, cast_op=None):
+        """Fetch data stored in file.
+
+        Args:
+            filename (str): Name of file.
+            cast_op (obj, optional): Cast operator.
+
+        Returns:
+            A list of dict stored in file.
+        """
         data = []
         with open('{}\\{}.csv'.format(self._savedir, filename), 'r', newline='') as f:
             r = csv.DictReader(f)
             for row in r:
-                if fmt_str:
+                if cast_op:
                     for elem_key in row:
-                        row[elem_key] = fmt_str(row[elem_key])
+                        row[elem_key] = cast_op(row[elem_key])
                 data.append(row)
         return data
 
-    def csv_get_last(self, filename, fmt_str=None):
-        return self.csv_get(filename, fmt_str=fmt_str)[-1]
+    def csv_get_last(self, filename, cast_op=None):
+        """Fetch the last row in file.
+
+        Args:
+            filename (str): Name of file.
+            cast_op (obj, optional): Cast operator.
+
+        Returns:
+            A dict representing the last row stored in file.
+        """
+        data = self.csv_get(filename, cast_op=cast_op)
+        if len(data) > 0:
+            return data[-1]
+        else:
+            return None

@@ -17,6 +17,8 @@ class Poloniex:
                   'rate',
                   'type',
                   'amount']
+    __MAX_LIMIT = 50000  # API limit on maximum trades returned
+    __MAX_RANGE = 100000  # must be less than 1 month
 
     def __init__(self, savedir='exchange_data\\poloniex', timeout=600):
         self._base_url = 'https://poloniex.com'
@@ -33,42 +35,65 @@ class Poloniex:
                 # HTTP not OK or Poloniex error
                 while not r.ok or 'error' in r.json():
                     time.sleep(3 * retries)
-                    print('Poloniex\t| Retries : {}'.format(retries))
+                    print('Poloniex| Retries : {}'.format(retries))
                     r = requests.get(self._base_url + path,
                                      params=payload,
                                      timeout=self._timeout)
                     retries += 1
             except Exception as e:
-                print('Poloniex\t| {}'.format(e))
+                print('Poloniex| {}'.format(e))
                 time.sleep(10)
                 continue
             break
         return r.json()
 
-    def _get_slice(self, pair, start, end):
+    def __get_slice(self, pair, start):
+        """Makes a call to the API that fetches trade data.
+
+        Example call:
+            https://poloniex.com/public?command=returnTradeHistory&currencyPair=BTC_NXT&start=1410158341&end=1410499372
+
+        Args:
+            pair (str): Currency pair.
+            start (int): UNIX of oldest trade data (inclusive).
+
+        Returns:
+            Trade data from time `start`, up to time `end`.
+        """
         params = {'currencyPair': pair,
-                  'start': start,  # inclusive
-                  'end': end}
+                  'start': start,
+                  'end': start + self.__MAX_RANGE}
         # new -> old
         r = self.__get('/public?command=returnTradeHistory', params)
-        if len(r) == 0:
-            return []
 
-        latest_date = r[0]['date']
-        latest_date = util.iso_to_unix(latest_date)
-        if len(r) >= 50000:
+        if len(r) >= self.__MAX_LIMIT:
             oldest_date = r[-1]['date']
             oldest_date = util.iso_to_unix(oldest_date)
-            r.extend(self._get_slice(pair, start, oldest_date))
+            r.extend(self.__get_slice(pair, start, oldest_date))
         return r
 
-    def download_data(self, **kwargs):
-        pair = kwargs['pair']
-        start = kwargs['start']
-        end = kwargs['end']
+    def __find_last_trade_time(self, pair):
+        """Find the latest time of trade for a given pair.
 
-        MAX_SLICE_RANGE = 2500000  # must be less than 1 month
+        Args:
+            pair (str): Currency pair.
 
+        Returns:
+            UNIX of last trade for `pair`.
+        """
+        params = {'currencyPair': pair}
+        # new -> old
+        r = self.__get('/public?command=returnTradeHistory', params)
+        return util.iso_to_unix(r[0]['date'])
+
+    def download_data(self, pair, start, end):
+        """Download trade data and store as .csv file.
+
+        Args:
+            pair (str): Currency pair.
+            start (int): Start UNIX of trade data to download.
+            end (int): End UNIX of trade data to download.
+        """
         dataio = DataIO(savedir=self._savedir, fieldnames=self.FIELDNAMES)
         last_row = None
         if dataio.csv_check(pair):
@@ -77,36 +102,52 @@ class Poloniex:
         else:
             newest_t = start
 
+        # break condition
+        last_trade_time = self.__find_last_trade_time(pair)
+
         while newest_t < end:
             # new -> old
-            r = self._get_slice(pair, newest_t, newest_t + MAX_SLICE_RANGE)
-            if len(r) == 0:
-                break
+            r = self.__get_slice(pair, newest_t)
 
-            # old -> new
-            newest_t = r[0]['date']
+            # old -> new; remove duplicate data by trade ID
             new_r = []
             for row in reversed(r):
                 if last_row is not None:
-                    if last_row['tradeID'] >= row['tradeID']:
+                    if int(last_row['tradeID']) >= row['tradeID']:
                         continue  # remove duplicates
                 last_row = row
                 row['time'] = util.iso_to_unix(row['date'])
                 new_r.append(row)
+
+            if newest_t > last_trade_time:
+                break
+
             # save to file
             dataio.csv_append(pair, new_r)
-            print('Poloniex\t| {} : {}'.format(newest_t, pair))
-            newest_t = util.iso_to_unix(newest_t)
 
-        print('Poloniex\t| Download complete : {}'.format(pair))
+            # prepare next iteration
+            newest_t += self.__MAX_RANGE
+            print('Poloniex| {} : {}'.format(util.unix_to_iso(newest_t), pair))
+
+        print('Poloniex| Download complete : {}'.format(pair))
 
     def get_trades(self, pair, start, end):
+        """Download or fetch trade data from disk.
+
+        Args:
+            pair (str): Currency pair.
+            start (int): Start UNIX of trade data to fetch.
+            end (int): End UNIX of trade data to fetch.
+
+        Returns:
+            List of trade events, from old to new data.
+        """
         dataio = DataIO(savedir=self._savedir, fieldnames=self.FIELDNAMES)
         if dataio.csv_check(pair):
             data = dataio.csv_get(pair)
         else:
             raise ValueError(
-                'Poloniex\t| No trades downloaded: {}'.format(pair))
+                'Poloniex| No trades downloaded: {}'.format(pair))
 
         # filter by requested date range
         new_data = []
@@ -121,8 +162,8 @@ class Poloniex:
 
         Args:
             pair (str): Currency pair.
-            start (int): UNIX start timestamp of chart data.
-            end (int): UNIX end timestamp of chart data.
+            start (int): Start UNIX of chart data to fetch.
+            end (int): End UNIX of chart data to fetch.
             interval (int): Interval, in seconds.
 
         Returns:
@@ -158,7 +199,6 @@ class Poloniex:
                         label_list[label].append(trade[label])
 
                 # API specific code below
-                # ['date', 'time', 'size', 'price', 'side', 'order_type']
                 # ['date', 'time', 'globalTradeID', 'tradeID', 'total', 'rate', 'type', 'amount']
 
                 # standard OHLC, volume, weighted average

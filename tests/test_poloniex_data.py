@@ -1,3 +1,5 @@
+import time
+
 from matplotlib.finance import candlestick2_ohlc
 
 import matplotlib.pyplot as plt
@@ -7,11 +9,12 @@ from poloniex_data import Poloniex
 if __name__ == '__main__':
 
     pair = 'USDT_ETH'
-    start = 1470000000
-    end = start + 30000
+    end = int(time.time())
+    end = end - (end % 60) + 300  # test boundary handling
+    start = int(end - 60 * 60 * 3)
 
     # download data
-    client = Poloniex()
+    client = Poloniex(savedir='test')
     client.download_data(pair=pair, start=start, end=end)
 
     # print trade samples
@@ -25,7 +28,7 @@ if __name__ == '__main__':
     print('End Trade Data', end='\n\n')
 
     # print chart samples
-    r = client.get_charts(pair=pair, start=start, end=end, interval=300)
+    r = client.get_charts(pair=pair, start=start, end=end, interval=60)
     for row in r[:10]:
         print(row)
     print('...')

@@ -15,6 +15,7 @@ class Gdax:
                   'size',
                   'price',
                   'side']
+    __MAX_LIMIT = 100  # API limit on maximum trades returned
 
     def __init__(self, savedir='exchange_data\\gdax', timeout=600):
         self._base_url = 'https://api.gdax.com'
@@ -31,69 +32,145 @@ class Gdax:
                 # HTTP not OK or Gdax error
                 while not r.ok or 'error' in r.json():
                     time.sleep(3 * retries)
-                    print('Gdax\t| Retries : {}'.format(retries))
+                    print('GDAX\t| Retries : {}'.format(retries))
                     r = requests.get(self._base_url + path,
                                      params=payload,
                                      timeout=self._timeout)
                     retries += 1
             except Exception as e:
-                print('Gdax\t| {}'.format(e))
+                print('GDAX\t| {}'.format(e))
                 time.sleep(10)
                 continue
             break
         return r.json()
 
-    def _get_slice(self, pair, end_trade_id, limit=100):
+    def __get_slice(self, pair, end_trade_id):
+        """Makes a call to the API that fetches trade data.
+
+        Example call:
+            https://api.gdax.com/products/BTC-USD/trades?after=100&limit=100
+
+        Args:
+            pair (str): Currency pair.
+            end_trade_id (int): The last trade ID in trade data (exclusive).
+
+        Returns:
+            Trade data up to `trade ID==(end_trade_id - 1)`, in the order of
+            newer data to older data.
+        """
         params = {'after': end_trade_id,  # exclusive
-                  'limit': limit}
+                  'limit': self.__MAX_LIMIT}
         # new -> old
-        r = self.__get('/products/{}/trades'.format(pair), params)
-        return r
+        return self.__get('/products/{}/trades'.format(pair), params)
 
-    def download_data(self, **kwargs):
-        pair = kwargs['pair']
-        end = kwargs['end']
+    def __find_last_trade_id(self, pair):
+        """Find the latest trade for a given pair.
 
-        MAX_RANGE = 100  # do not change
+        Example call of trades returned for maximum valid trade ID: 
+            https://api.gdax.com/products/BTC-USD/trades?after=2147483647&limit=100
 
+        Args:
+            pair (str): Currency pair.
+
+        Returns:
+            Trade ID of the last trade for `pair`.
+        """
+        MAX_VALID_TRADE_ID = 2147483647  # max int32 val
+        return self.__get_slice(pair, MAX_VALID_TRADE_ID)[0]['trade_id']
+
+    def __find_start_trade_id(self, pair, start_unix):
+        """Find starting trade ID given start UNIX.
+
+        Args:
+            pair (str): Currency pair.
+            start_unix (int): Start UNIX to map to a start trade ID (inclusive).
+
+        Returns:
+            Earliest trade ID after time `start_unix`.
+        """
+        # check if no pair trades exist before start_unix
+        r = self.__get_slice(pair, 1 + self.__MAX_LIMIT)
+        oldest_t = util.iso_to_unix(r[-1]['time'])
+        if oldest_t > start_unix:
+            print('GDAX\t| No trades exist for {} before {}'.format(
+                pair, start_unix))
+            return 1
+
+        # binary search start trade ID
+        start, end = 1, self.__find_last_trade_id(pair)
+        while start <= end:
+            mid = (start + end) // 2
+            r = self.__get_slice(pair, mid + 1)
+            newest_t = util.iso_to_unix(r[0]['time'])
+            oldest_t = util.iso_to_unix(r[-1]['time'])
+            if start_unix < oldest_t:
+                end = mid
+            elif start_unix > newest_t:
+                start = mid
+            else:
+                # find trade start ID in the returned list
+                for row in r:
+                    current_t = util.iso_to_unix(row['time'])
+                    if start_unix > current_t:
+                        return row['trade_id'] + 1
+
+    def download_data(self, pair, start, end):
+        """Download trade data and store as .csv file.
+
+        Args:
+            pair (str): Currency pair.
+            start (int): Start UNIX of trade data to download.
+            end (int): End UNIX of trade data to download.
+        """
         dataio = DataIO(savedir=self._savedir, fieldnames=self.FIELDNAMES)
         if dataio.csv_check(pair):
-            newest_id = int(dataio.csv_get_last(pair)['trade_id']) + 1
-            newest_t = int(dataio.csv_get_last(pair)['time'])
+            last_row = dataio.csv_get_last(pair)
+            newest_id = int(last_row['trade_id']) + 1
+            newest_t = int(last_row['time'])
         else:
-            newest_id = 1
+            newest_id = self.__find_start_trade_id(pair, start)
             newest_t = 0
 
+        last_trade_id = self.__find_last_trade_id(pair)
+
         while newest_t < end:
-            r = self._get_slice(pair, newest_id + MAX_RANGE, MAX_RANGE)
-            if r[0]['trade_id'] != (newest_id + MAX_RANGE - 1):
-                correct_r = []
-                for row in r:
-                    if row['trade_id'] > newest_id:
-                        correct_r.append(row)
-                if len(correct_r) == 0:
-                    break
-                else:
-                    r = correct_r
-            newest_id = r[0]['trade_id']
-            newest_t = util.iso_to_unix(r[0]['time'])
+            # new -> old
+            r = self.__get_slice(pair, newest_id + self.__MAX_LIMIT)
+
+            # break condition
+            to_break = False
 
             # old -> new, add unix timestamp
             new_r = []
             for row in reversed(r):
-                row['date'] = row['time']
-                row['time'] = util.iso_to_unix(row['time'])
-                new_r.append(row)
+                if row['trade_id'] > newest_id:
+                    row['date'] = row['time']
+                    row['time'] = util.iso_to_unix(row['time'])
+                    new_r.append(row)
+                if row['trade_id'] == last_trade_id:
+                    to_break = True
+
+            # save to file
             dataio.csv_append(pair, new_r)
-            print('Gdax\t| {} : {}'.format(newest_id, pair))
+
+            # break condition
+            if to_break:
+                break
+
+            # prepare next iteration
+            newest_id = new_r[-1]['trade_id']
+            newest_t = new_r[-1]['time']
+            print('GDAX\t| {} : {}'.format(util.unix_to_iso(newest_t), pair))
+
+        print('GDAX\t| Download complete : {}'.format(pair))
 
     def get_trades(self, pair, start, end):
-        """Download or fetch trade data from disk.
+        """Get trade data from .csv file.
 
         Args:
             pair (str): Currency pair.
-            start (int): UNIX start timestamp of trade data.
-            end (int): UNIX end timestamp of trade data.
+            start (int): Start UNIX of trade data to fetch.
+            end (int): End UNIX of trade data to fetch.
 
         Returns:
             List of trade events, from old to new data.
@@ -103,7 +180,7 @@ class Gdax:
             data = dataio.csv_get(pair)
         else:
             raise ValueError(
-                'Gdax\t| No trades downloaded: {}'.format(pair))
+                'GDAX\t| No trades downloaded: {}'.format(pair))
 
         # filter by requested date range
         new_data = []
@@ -118,8 +195,8 @@ class Gdax:
 
         Args:
             pair (str): Currency pair.
-            start (int): UNIX start timestamp of chart data.
-            end (int): UNIX end timestamp of chart data.
+            start (int): Start UNIX of chart data to fetch.
+            end (int): End UNIX of chart data to fetch.
             interval (int): Interval, in seconds.
 
         Returns:

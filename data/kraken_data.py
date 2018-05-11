@@ -15,6 +15,7 @@ class Kraken:
                   'price',
                   'side',
                   'order_type']
+    __MAX_LIMIT = 1000  # API limit on maximum trades returned
 
     def __init__(self, savedir='exchange_data\\kraken', timeout=600):
         self._base_url = 'https://api.kraken.com/0'
@@ -43,7 +44,34 @@ class Kraken:
             break
         return r.json()
 
+    def __get_slice(self, pair, since):
+        """Makes a call to the API that fetches trade data.
+
+        Example call:
+            https://api.kraken.com/0/public/Trades?pair=XXBTZUSD&since=1526008794000000000
+
+        Args:
+            pair (str): Currency pair.
+            since (int): UNIX of oldest trade data (inclusive).
+
+        Returns:
+            Trade data since time `since`, up to maximum trade list size
+            `self.__MAX_LIMIT==1000`, in the order of older data to newer data.
+        """
+        params = {'pair': pair,
+                  'since': int(since * 1e9)}
+        # old -> new
+        return self.__get('/public/Trades', params)['result'][pair]
+
     def __to_dict(self, data):
+        """Convert API trade data response into a list of dict.
+
+        Args:
+            data (list of list): API trade data response.
+
+        Returns:
+            A properly formatted list of dict.
+        """
         new_data = []
         for row in data:
             row_dict = {'date': util.unix_to_iso(row[2]),
@@ -55,72 +83,78 @@ class Kraken:
             new_data.append(row_dict)
         return new_data
 
-    def _get_slice(self, pair, start, end):
-        # old -> new
-        params = {'pair': pair,
-                  'since': int(start * 1000000000)}
-        r = self.__get('/public/Trades', params)
+    def __find_start_trade_time(self, pair, start_unix):
+        """Find a valid start UNIX, given arbitrary start UNIX.
 
-        new_r = []
-        new_r.extend(r['result'][pair])
-        last = int(r['result']['last']) / 1000000000
+        Args:
+            pair (str): Currency pair.
+            start (int): Start UNIX of trade data check if valid.
 
-        while last < end:
-            params = {'pair': pair,
-                      'since': int(last * 1000000000)}
-            r = self.__get('/public/Trades', params)
-            last_ = int(r['result']['last']) / 1000000000
-            if last_ == last:
-                print('Krak Trade {}\t| No future trades after {}'.format(
-                    pair, last))
-                return []
-            last = last_
-            new_r.extend(r['result'][pair])
+        Returns:
+            A valid start UNIX, either `start_unix` or UNIX of first trade
+            ever made for `pair`.
 
-        index = 0  # find last one to include
-        for trade in new_r:
-            timestamp = trade[2]
-            if timestamp > end:
-                break
-            index += 1
-        return new_r[:index]
+        """
+        # check if no pair trades exist before start_unix
+        r = self.__get_slice(pair, 0)
+        oldest_t = r[-1][2]
+        if oldest_t > start_unix:
+            print('Kraken\t| No trades exist for {} before {}'.format(
+                pair, start_unix))
+            return oldest_t
+        return start_unix
 
-    def download_data(self, **kwargs):
-        pair = kwargs['pair']
-        start = kwargs['start']
-        end = kwargs['end']
+    def download_data(self, pair, start, end):
+        """Download trade data and store as .csv file.
 
-        MAX_SLICE_RANGE = 2500000  # preference
-
+        Args:
+            pair (str): Currency pair.
+            start (int): Start UNIX of trade data to download.
+            end (int): End UNIX of trade data to download.
+        """
         dataio = DataIO(savedir=self._savedir, fieldnames=self.FIELDNAMES)
-        last_row = None
         if dataio.csv_check(pair):
-            last_row = dataio.csv_get_last(pair)
-            newest_t = float(last_row['time'])
+            newest_t = float(dataio.csv_get_last(pair)['time'])
         else:
-            newest_t = start
+            newest_t = self.__find_start_trade_time(pair, start)
 
         while newest_t < end:
             # old -> new
-            r = self._get_slice(pair, newest_t, newest_t + MAX_SLICE_RANGE)
-            if len(r) == 0:
-                break
+            r = self.__get_slice(pair, newest_t + 1e-4)
+
+            # list to dict
             r = self.__to_dict(r)
 
             # save to file
             dataio.csv_append(pair, r)
-            print('Kraken\t| {} : {}'.format(
-                util.unix_to_iso(r[-1]['time']), pair))
+
+            # break condition
+            if len(r) < self.__MAX_LIMIT:
+                break
+
+            # prepare next iteration
             newest_t = float(r[-1]['time'])
+            print('Kraken\t| {} : {}'.format(util.unix_to_iso(newest_t), pair))
 
         print('Kraken\t| Download complete : {}'.format(pair))
 
     def get_trades(self, pair, start, end):
+        """Download or fetch trade data from disk.
+
+        Args:
+            pair (str): Currency pair.
+            start (int): Start UNIX of trade data to fetch.
+            end (int): End UNIX of trade data to fetch.
+
+        Returns:
+            List of trade events, from old to new data.
+        """
         dataio = DataIO(savedir=self._savedir, fieldnames=self.FIELDNAMES)
         if dataio.csv_check(pair):
             data = dataio.csv_get(pair)
         else:
-            raise ValueError('Kraken\t| No trades downloaded: {}'.format(pair))
+            raise ValueError(
+                'Kraken\t| No trades downloaded: {}'.format(pair))
 
         # filter by requested date range
         new_data = []
@@ -135,8 +169,8 @@ class Kraken:
 
         Args:
             pair (str): Currency pair.
-            start (int): UNIX start timestamp of chart data.
-            end (int): UNIX end timestamp of chart data.
+            start (int): Start UNIX of chart data to fetch.
+            end (int): End UNIX of chart data to fetch.
             interval (int): Interval, in seconds.
 
         Returns:

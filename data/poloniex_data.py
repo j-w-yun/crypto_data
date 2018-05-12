@@ -4,7 +4,7 @@ import requests
 
 from dataio import DataIO
 import numpy as np
-import util
+import timeutil
 
 
 class Poloniex:
@@ -68,7 +68,7 @@ class Poloniex:
 
         if len(r) >= self.__MAX_LIMIT:
             oldest_date = r[-1]['date']
-            oldest_date = util.iso_to_unix(oldest_date)
+            oldest_date = timeutil.iso_to_unix(oldest_date)
             r.extend(self.__get_slice(pair, start, oldest_date))
         return r
 
@@ -84,7 +84,7 @@ class Poloniex:
         params = {'currencyPair': pair}
         # new -> old
         r = self.__get('/public?command=returnTradeHistory', params)
-        return util.iso_to_unix(r[0]['date'])
+        return timeutil.iso_to_unix(r[0]['date'])
 
     def download_data(self, pair, start, end):
         """Download trade data and store as .csv file.
@@ -116,7 +116,7 @@ class Poloniex:
                     if int(last_row['tradeID']) >= row['tradeID']:
                         continue  # remove duplicates
                 last_row = row
-                row['time'] = util.iso_to_unix(row['date'])
+                row['time'] = timeutil.iso_to_unix(row['date'])
                 new_r.append(row)
 
             if newest_t > last_trade_time:
@@ -127,7 +127,8 @@ class Poloniex:
 
             # prepare next iteration
             newest_t += self.__MAX_RANGE
-            print('Poloniex| {} : {}'.format(util.unix_to_iso(newest_t), pair))
+            print('Poloniex| {} : {}'.format(
+                timeutil.unix_to_iso(newest_t), pair))
 
         print('Poloniex| Download complete : {}'.format(pair))
 
@@ -152,7 +153,7 @@ class Poloniex:
         # filter by requested date range
         new_data = []
         for row in data:
-            if int(row['time']) >= start and int(row['time']) <= end:
+            if float(row['time']) >= float(start) and float(row['time']) <= float(end):
                 new_data.append(row)
         return new_data
 
@@ -170,10 +171,10 @@ class Poloniex:
             List of ticks, from old to new data.
         """
         # get trade data, from oldest to newest trades
-        trade_data = self.get_trades(pair, (start - interval), end)
+        trade_data = self.get_trades(pair, start, end)
 
         # bucket trade data into intervals
-        timepoints = np.arange(start, end, interval)
+        timepoints = np.arange(start + interval, end, interval)
         chart_data = []
         index = 0
         for t in timepoints:
@@ -183,9 +184,9 @@ class Poloniex:
             # collect relevant trades for the bucket
             bucket = []
             while (len(trade_data) > index and
-                   (float(trade_data[index]['time']) // 1) >= lower_t and
-                   (float(trade_data[index]['time']) // 1) <= upper_t):
-                bucket.append(trade_data[index])
+                   float(trade_data[index]['time']) <= float(upper_t)):
+                if float(trade_data[index]['time']) >= float(lower_t):
+                    bucket.append(trade_data[index])
                 index += 1
 
             tick = {}

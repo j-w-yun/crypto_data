@@ -148,3 +148,17 @@ class DataManager:
             async_op.get()
         tp.close()
         tp.join()
+
+
+if __name__ == '__main__':
+    dm = DataManager()
+    all_pairs = dm.all_pairs
+    pair_count = 0
+    for ex in sorted(all_pairs):
+        pairs = all_pairs[ex]
+        n_pairs = len(pairs)
+        print('{} currency pairs in {}:'.format(n_pairs, ex))
+        print(pairs, '\n')
+        pair_count += n_pairs
+    print('{} total currency pairs in {} exchanges.'.format(
+        pair_count, len(all_pairs)))

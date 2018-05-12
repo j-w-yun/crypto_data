@@ -37,7 +37,7 @@ class Binance(base_data.BaseExchange):
                                  timeout=self._timeout)
                 # HTTP not OK or Binance error
                 while not r.ok or 'code' in r.json():
-                    time.sleep(3 * retries)
+                    time.sleep(10 * retries)
                     print('Binance\t| Retries : {}'.format(retries))
                     r = requests.get(self.__BASE_URL + path,
                                      params=payload,

@@ -8,7 +8,7 @@ import timeutil
 def test_download_all(start, end):
     # DataManager instance will download and fetch trade and chart data
     dm = DataManager()
-    dm.download_all(start, end, n_proc=128)
+    dm.download_all(start, end, n_proc=64)
 
 
 def test_get_charts(start, end):

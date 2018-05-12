@@ -8,24 +8,29 @@ import numpy as np
 import timeutil
 
 
-class Kraken(base_data.BaseExchange):
+class Bitmex(base_data.BaseExchange):
 
     # Fieldnames are used as header in saved CSV file. All headers should
     # have both date (ISO) and time (UNIX) fieldnames.
     FIELDNAMES = [
-        'date',  # engineered from UNIX
-        'time',  # native
+        'date',  # renamed from native 'timestamp'
+        'time',  # engineered from ISO
         'size',  # native
         'price',  # native
         'side',  # native
-        'order_type'  # native
+        'tickDirection',  # native
+        'grossValue',  # native
+        'homeNotional',  # native
+        'foreignNotional',  # native
+        'trdMatchID',  # native
+        'trade_id'  # engineered from pagination
     ]
-    __MAX_LIMIT = 1000  # API limit on maximum trades returned
-    __BASE_URL = 'https://api.kraken.com/0'  # base API url
+    __MAX_LIMIT = 500  # API limit on maximum trades returned
+    __BASE_URL = 'https://www.bitmex.com/api/v1'  # base API url
 
-    def __init__(self, savedir='exchange_data\\kraken', timeout=600):
-        self._savedir = savedir
+    def __init__(self, savedir='exchange_data\\bitmex', timeout=600):
         self._timeout = timeout
+        self._savedir = savedir
 
     def __get(self, path, payload, max_retries=100):
         r = None
@@ -34,79 +39,96 @@ class Kraken(base_data.BaseExchange):
                 r = requests.get(self.__BASE_URL + path,
                                  params=payload,
                                  timeout=self._timeout)
-                # HTTP not OK or Kraken error
-                while not r.ok or len(r.json()['error']) > 0:
-                    time.sleep(3 * retries)
-                    print('Kraken\t| Retries : {}'.format(retries))
+                # HTTP not OK or Bitmex error
+                while not r.ok or 'error' in r.json():
+                    time.sleep(10 * retries)
+                    print('Bitmex\t| Retries : {}'.format(retries))
                     r = requests.get(self.__BASE_URL + path,
                                      params=payload,
                                      timeout=self._timeout)
                     retries += 1
             except Exception as e:
-                print('Kraken\t| {}'.format(e))
+                print('Bitmex\t| {}'.format(e))
                 time.sleep(10)
                 continue
             break
-        return r.json()['result']
+        return r.json()
 
-    def __get_slice(self, pair, since):
+    def __get_slice(self, pair, start_trade_id):
         """Makes a call to the API that fetches trade data.
 
         Example call:
-            https://api.kraken.com/0/public/Trades?pair=XXBTZUSD&since=1526008794000000000
+            https://www.bitmex.com/api/v1/trade?symbol=XBTUSD&count=500&start=0
 
         Args:
             pair (str): Currency pair.
-            since (int): UNIX of oldest trade data (inclusive).
+            start_trade_id (int): The start ID of trade data (inclusive).
 
         Returns:
-            Trade data since time `since`, up to maximum trade list of size
-            `self.__MAX_LIMIT`, in the order of increasing UNIX.
+            Trade data starting from `start_trade_id` (inclusive) up to
+            `start_trade_id+self.__MAX_LIMIT`, in the order of increasing UNIX.
         """
-        params = {'pair': pair,
-                  'since': int(since * 1e9)}
+        params = {'symbol': pair,
+                  'start': start_trade_id,  # inclusive
+                  'count': self.__MAX_LIMIT}
         # old -> new
-        return self.__get('/public/Trades', params)[pair]
+        return self.__get('/trade', params)
 
-    def __to_dict(self, data):
-        """Convert API trade data response into a list of dict.
-
-        Args:
-            data (list of list): API trade data response.
-
-        Returns:
-            List of python dict.
-        """
-        new_data = []
-        for row in data:
-            row_dict = {'date': timeutil.unix_to_iso(row[2]),
-                        'time': row[2],
-                        'size': row[1],
-                        'price': row[0],
-                        'side': row[3],
-                        'order_type': row[4]}
-            new_data.append(row_dict)
-        return new_data
-
-    def __find_start_trade_time(self, pair, start_unix):
-        """Find a valid start UNIX, given arbitrary start UNIX.
+    def __find_start_trade_id(self, pair, start_unix):
+        """Find starting trade ID given start UNIX.
 
         Args:
             pair (str): Currency pair.
-            start (int): Start UNIX of trade data check if valid.
+            start_unix (int): Start UNIX to map to a start trade ID (inclusive).
 
         Returns:
-            A valid start UNIX, either `start_unix` or UNIX of first trade
-            ever made for `pair`.
+            Earliest trade ID after time `start_unix`.
         """
         # check if no pair trades exist before start_unix
         r = self.__get_slice(pair, 0)
-        oldest_t = r[-1][2]
+        oldest_t = timeutil.iso_to_unix(r[0]['timestamp'])
         if oldest_t > start_unix:
-            print('Kraken\t| No trades exist for {} before {}'.format(
+            print('Bitmex\t| No trades exist for {} before {}'.format(
                 pair, start_unix))
-            return oldest_t
-        return start_unix
+            return 0
+
+        # incrementally search start trade ID
+        current_id = 0
+        increment = 10000000
+
+        while True:
+            current_id += increment
+            # old -> new
+            r = self.__get_slice(pair, current_id)
+
+            print(current_id)
+
+            if len(r) == 0:
+                current_id -= increment
+                increment = increment // 2
+                continue
+
+            oldest_t = timeutil.iso_to_unix(r[0]['timestamp'])
+            newest_t = timeutil.iso_to_unix(r[-1]['timestamp'])
+
+            if start_unix > oldest_t and start_unix < newest_t:
+                # answer is in this page
+                for row in r:
+                    if timeutil.iso_to_unix(row['timestamp']) >= start_unix:
+                        return current_id
+                    current_id += 1
+            elif start_unix > newest_t:
+                pass
+            elif start_unix < oldest_t:
+                current_id -= increment
+                increment = increment // 2
+            elif start_unix > oldest_t and len(r) < self.__MAX_LIMIT:
+                # last page
+                for row in r:
+                    if timeutil.iso_to_unix(row['timestamp']) >= start_unix:
+                        return current_id
+                    current_id += 1
+                return current_id  # starting at this id will return empty list
 
     def download_data(self, pair, start, end):
         """Download trade data and store as .csv file.
@@ -118,30 +140,42 @@ class Kraken(base_data.BaseExchange):
         """
         dataio = DataIO(savedir=self._savedir, fieldnames=self.FIELDNAMES)
         if dataio.csv_check(pair):
-            newest_t = float(dataio.csv_get_last(pair)['time'])
+            last_row = dataio.csv_get_last(pair)
+            newest_id = int(last_row['trade_id']) + 1
+            newest_t = int(last_row['time'])
         else:
-            newest_t = self.__find_start_trade_time(pair, start)
+            newest_id = self.__find_start_trade_id(pair, start)
+            newest_t = 0
 
         while newest_t < end:
-            # old -> new
-            r = self.__get_slice(pair, newest_t + 1e-4)
+            # new -> old
+            r = self.__get_slice(pair, newest_id)
 
-            # list to dict
-            r = self.__to_dict(r)
+            # old -> new, add unix timestamp
+            new_r = []
+            for i, row in enumerate(r):
+                row['time'] = timeutil.iso_to_unix(row['timestamp'])
+                row['date'] = row['timestamp']
+                row['trade_id'] = newest_id + i
+                row['side'] = row['side'].lower()
+                row.pop('timestamp', None)
+                row.pop('symbol', None)
+                new_r.append(row)
 
             # save to file
-            dataio.csv_append(pair, r)
+            dataio.csv_append(pair, new_r)
 
             # break condition
             if len(r) < self.__MAX_LIMIT:
                 break
 
             # prepare next iteration
-            newest_t = float(r[-1]['time'])
-            print('Kraken\t| {} : {}'.format(
+            newest_id = new_r[-1]['trade_id'] + 1
+            newest_t = new_r[-1]['time']
+            print('Bitmex\t| {} : {}'.format(
                 timeutil.unix_to_iso(newest_t), pair))
 
-        print('Kraken\t| Download complete : {}'.format(pair))
+        print('Bitmex\t| Download complete : {}'.format(pair))
 
     def get_trades(self, pair, start, end):
         """Get trade data from .csv file.
@@ -159,11 +193,11 @@ class Kraken(base_data.BaseExchange):
             data = dataio.csv_get(pair)
         else:
             raise ValueError(
-                'Kraken\t| No trades downloaded: {}'.format(pair))
+                'Bitmex\t| No trades downloaded: {}'.format(pair))
 
         # look for start and end row indices
-        start_index = None
-        end_index = None
+        start_index = 0
+        end_index = len(data['time']) - 1
         for i, timestamp in enumerate(data['time']):
             if float(timestamp) <= float(start):
                 start_index = i
@@ -323,9 +357,4 @@ class Kraken(base_data.BaseExchange):
         Returns:
             A list of currency pair strings.
         """
-        r = self.__get('/public/AssetPairs', None)
-        pairs = []
-        for product in r:
-            if not '.d' in product:
-                pairs.append(product)
-        return sorted(pairs)
+        return ['XBTUSD', 'ADAM18', 'BCHM18', 'ETHM18', 'LTCM18', 'XRPM18']

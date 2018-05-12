@@ -6,7 +6,7 @@ if __name__ == '__main__':
     filename = 'test'
     fieldnames = ['time', 'low', 'high']
 
-    csvio = DataIO('/', fieldnames)
+    csvio = DataIO('test', fieldnames)
     csvio.csv_newfile(filename)
 
     test_row1 = {'time': 1.0, 'low': 100, 'high': 101}
@@ -24,5 +24,7 @@ if __name__ == '__main__':
     csvio.csv_append(filename, test_row2)
     csvio.csv_append(filename, test_rows)
 
-    data = csvio.csv_get(filename, float)
+    data = csvio.csv_get(filename)
     print(data)
+
+    csvio.csv_rename(filename, 'test2')

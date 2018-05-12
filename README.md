@@ -12,26 +12,36 @@
 
 Data is stored in `/exchange/{exchange_name}/{currency_pair_name}.csv` separately for each currency pair.
 
-Currently supports three exchanges:
+Currently supports five exchanges:
+
+Binance exchange:
+
+	import binance_data
+	client = binance_data.Binance()
+
+Bitmex exchange:
+	
+	import bitmex_data
+	client = bitmex_data.Bitmex()
 
 GDAX exchange:
 	
-	from gdax_data import Gdax
-	client = Gdax()
+	import gdax_data
+	client = gdax_data.Gdax()
 
 Kraken exchange:
 
-	from kraken_data import Kraken
-	client = Kraken()
+	import kraken_data
+	client = kraken_data.Kraken()
 
 Poloniex exchange:
 
-	from poloniex_data import Poloniex
-	client = Poloniex()
+	import poloniex_data
+	client = poloniex_data.Poloniex()
 
 ---
 
-Code for each exchange share three universal public methods:
+Code for each exchange share four universal public methods:
 
 	client.download_data(currency_pair_name, start_unix, end_unix)
 
@@ -47,21 +57,35 @@ Fetches downloaded trade data as a list of python dict, in the order of increasi
 
 Fetches downloaded trade data and builds OHLC + additional information from trade data as a list of python dict, in the order of increasing UNIX.
 
+	client.get_pairs()
+
+Fetches all currency pairs currently supported by the exchange.
+
 ---
 
-These exchange clients and their methods are incorporated in the `DataManager` class, which offers:
+These exchange clients and their methods are incorporated in the `DataManager` class:
 
-	get_trades(exchange_name, currency_pair_name, start_unix, end_unix)
+	import data_manager
+	dm = data_manager.DataManager()
+
+`DataManager` offers the following methods:
+
+	dm.get_trades(exchange_name, currency_pair_name, start_unix, end_unix)
 
 Downloads and returns trade data as a list of python dicts, in the order of increasing UNIX.
 
-	get_charts(exchange_name, currency_pair_name, start_unix, end_unix)
+	dm.get_charts(exchange_name, currency_pair_name, start_unix, end_unix)
 
 Downloads trade data and returns OHLC data as a list of python dicts, in the order of increasing UNIX.
 
-	download_all(start_unix, end_unix)
+	dm.download_all(start_unix, end_unix)
 
-Concurrently downloads all pairs from each exchange specified in `datalist.EXCHANGE_PAIRS` and `datalist.EXCHANGE_CLIENTS`.
+Concurrently downloads all pairs from each exchange.
+
+	dm.all_clients()
+	dm.all_pairs()
+
+Fetches all suppoerted exchange client instances and list of currency pairs for each exchange, respectively.
 
 
 ## Tests
@@ -74,17 +98,11 @@ The following test file downloads most recent trades of BTC and ETH currencies p
 
 ---
 
-Following test files downloads ETH-USD pairs from each exchange and plots OHLC:
+The following test file downloads currency pairs from each exchange and plots OHLC:
 
-	/tests/test_gdax_data.py
+	/tests/test_exchange_data.py
 
 ![alt tag](https://github.com/Jaewan-Yun/cdata/blob/master/figures/test_gdax_data.png)
-
-	/tests/test_kraken_data.py
-
 ![alt tag](https://github.com/Jaewan-Yun/cdata/blob/master/figures/test_kraken_data.png)
-
-	/tests/test_poloniex_data.py
-
 ![alt tag](https://github.com/Jaewan-Yun/cdata/blob/master/figures/test_poloniex_data.png)
 

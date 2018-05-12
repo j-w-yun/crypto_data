@@ -4,7 +4,7 @@ import requests
 
 from dataio import DataIO
 import numpy as np
-import util
+import timeutil
 
 
 class Gdax:
@@ -29,7 +29,7 @@ class Gdax:
                 r = requests.get(self._base_url + path,
                                  params=payload,
                                  timeout=self._timeout)
-                # HTTP not OK or Gdax error
+                # HTTP not OK or GDAX error
                 while not r.ok or 'error' in r.json():
                     time.sleep(3 * retries)
                     print('GDAX\t| Retries : {}'.format(retries))
@@ -90,7 +90,7 @@ class Gdax:
         """
         # check if no pair trades exist before start_unix
         r = self.__get_slice(pair, 1 + self.__MAX_LIMIT)
-        oldest_t = util.iso_to_unix(r[-1]['time'])
+        oldest_t = timeutil.iso_to_unix(r[-1]['time'])
         if oldest_t > start_unix:
             print('GDAX\t| No trades exist for {} before {}'.format(
                 pair, start_unix))
@@ -101,8 +101,8 @@ class Gdax:
         while start <= end:
             mid = (start + end) // 2
             r = self.__get_slice(pair, mid + 1)
-            newest_t = util.iso_to_unix(r[0]['time'])
-            oldest_t = util.iso_to_unix(r[-1]['time'])
+            newest_t = timeutil.iso_to_unix(r[0]['time'])
+            oldest_t = timeutil.iso_to_unix(r[-1]['time'])
             if start_unix < oldest_t:
                 end = mid
             elif start_unix > newest_t:
@@ -110,7 +110,7 @@ class Gdax:
             else:
                 # find trade start ID in the returned list
                 for row in r:
-                    current_t = util.iso_to_unix(row['time'])
+                    current_t = timeutil.iso_to_unix(row['time'])
                     if start_unix > current_t:
                         return row['trade_id'] + 1
 
@@ -145,7 +145,7 @@ class Gdax:
             for row in reversed(r):
                 if row['trade_id'] > newest_id:
                     row['date'] = row['time']
-                    row['time'] = util.iso_to_unix(row['time'])
+                    row['time'] = timeutil.iso_to_unix(row['time'])
                     new_r.append(row)
                 if row['trade_id'] == last_trade_id:
                     to_break = True
@@ -160,7 +160,8 @@ class Gdax:
             # prepare next iteration
             newest_id = new_r[-1]['trade_id']
             newest_t = new_r[-1]['time']
-            print('GDAX\t| {} : {}'.format(util.unix_to_iso(newest_t), pair))
+            print('GDAX\t| {} : {}'.format(
+                timeutil.unix_to_iso(newest_t), pair))
 
         print('GDAX\t| Download complete : {}'.format(pair))
 
@@ -185,7 +186,7 @@ class Gdax:
         # filter by requested date range
         new_data = []
         for row in data:
-            if int(row['time']) >= start and int(row['time']) <= end:
+            if float(row['time']) >= float(start) and float(row['time']) <= float(end):
                 new_data.append(row)
         return new_data
 
@@ -203,10 +204,10 @@ class Gdax:
             List of ticks, from old to new data.
         """
         # get trade data, from oldest to newest trades
-        trade_data = self.get_trades(pair, (start - interval), end)
+        trade_data = self.get_trades(pair, start, end)
 
         # bucket trade data into intervals
-        timepoints = np.arange(start, end, interval)
+        timepoints = np.arange(start + interval, end, interval)
         chart_data = []
         index = 0
         for t in timepoints:
@@ -216,9 +217,9 @@ class Gdax:
             # collect relevant trades for the bucket
             bucket = []
             while (len(trade_data) > index and
-                   (float(trade_data[index]['time']) // 1) >= lower_t and
-                   (float(trade_data[index]['time']) // 1) <= upper_t):
-                bucket.append(trade_data[index])
+                   float(trade_data[index]['time']) <= float(upper_t)):
+                if float(trade_data[index]['time']) >= float(lower_t):
+                    bucket.append(trade_data[index])
                 index += 1
 
             tick = {}
@@ -253,22 +254,22 @@ class Gdax:
                 sell_sizes = np.asarray(
                     [size for size, side in
                      zip(label_list['size'],
-                         label_list['side']) if side == 's'],
+                         label_list['side']) if side == 'sell'],
                     dtype=np.float32)
                 buy_sizes = np.asarray(
                     [size for size, side in
                      zip(label_list['size'],
-                         label_list['side']) if side == 'b'],
+                         label_list['side']) if side == 'buy'],
                     dtype=np.float32)
                 sell_prices = np.asarray(
                     [price for price, side in
                      zip(label_list['price'],
-                         label_list['side']) if side == 's'],
+                         label_list['side']) if side == 'sell'],
                     dtype=np.float32)
                 buy_prices = np.asarray(
                     [price for price, side in
                      zip(label_list['price'],
-                         label_list['side']) if side == 'b'],
+                         label_list['side']) if side == 'buy'],
                     dtype=np.float32)
 
                 tick['n_sells'] = len(sell_sizes)

@@ -1,9 +1,11 @@
+import sys
+
 from matplotlib.finance import candlestick2_ohlc
 
 from data_manager import DataManager
 import datalist
 import matplotlib.pyplot as plt
-import util
+import timeutil
 
 
 if __name__ == '__main__':
@@ -11,14 +13,18 @@ if __name__ == '__main__':
     dm = DataManager(datalist.EXCHANGE_CLIENTS, datalist.EXCHANGE_PAIRS)
 
     # start UNIX of data
-    date_dict = {'year': 2018, 'month': 5, 'day': 1, 'hour': 0, 'minute': 0}
-    start = util.local_date_to_unix(util.dict_to_local_date(date_dict))
+    date_dict = {'year': 2016, 'month': 8, 'day': 1, 'hour': 0, 'minute': 0}
+    start = timeutil.local_date_to_unix(timeutil.date_dict_to_local_date(date_dict))
     print('Start UNIX: {}'.format(start))
 
     # end UNIX of data
-    date_dict = {'year': 2018, 'month': 5, 'day': 2, 'hour': 0, 'minute': 0}
-    end = util.local_date_to_unix(util.dict_to_local_date(date_dict))
+    date_dict = {'year': 2018, 'month': 5, 'day': 9, 'hour': 0, 'minute': 0}
+    end = timeutil.local_date_to_unix(timeutil.date_dict_to_local_date(date_dict))
     print('End UNIX: {}\n'.format(end))
+
+    dm.download_all(start, end, n_proc=64)
+
+    sys.exit()
 
     # download if not present on disk and fetch charts
     # both trade and chart data fetched through DataManager is a list of dict,

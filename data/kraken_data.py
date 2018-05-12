@@ -4,7 +4,7 @@ import requests
 
 from dataio import DataIO
 import numpy as np
-import util
+import timeutil
 
 
 class Kraken:
@@ -74,7 +74,7 @@ class Kraken:
         """
         new_data = []
         for row in data:
-            row_dict = {'date': util.unix_to_iso(row[2]),
+            row_dict = {'date': timeutil.unix_to_iso(row[2]),
                         'time': row[2],
                         'size': row[1],
                         'price': row[0],
@@ -134,7 +134,8 @@ class Kraken:
 
             # prepare next iteration
             newest_t = float(r[-1]['time'])
-            print('Kraken\t| {} : {}'.format(util.unix_to_iso(newest_t), pair))
+            print('Kraken\t| {} : {}'.format(
+                timeutil.unix_to_iso(newest_t), pair))
 
         print('Kraken\t| Download complete : {}'.format(pair))
 
@@ -159,7 +160,7 @@ class Kraken:
         # filter by requested date range
         new_data = []
         for row in data:
-            if float(row['time']) >= start and float(row['time']) <= end:
+            if float(row['time']) >= float(start) and float(row['time']) <= float(end):
                 new_data.append(row)
         return new_data
 
@@ -177,10 +178,10 @@ class Kraken:
             List of ticks, from old to new data.
         """
         # get trade data, from oldest to newest trades
-        trade_data = self.get_trades(pair, (start - interval), end)
+        trade_data = self.get_trades(pair, start, end)
 
         # bucket trade data into intervals
-        timepoints = np.arange(start, end, interval)
+        timepoints = np.arange(start + interval, end, interval)
         chart_data = []
         index = 0
         for t in timepoints:
@@ -190,9 +191,9 @@ class Kraken:
             # collect relevant trades for the bucket
             bucket = []
             while (len(trade_data) > index and
-                   (float(trade_data[index]['time']) // 1) >= lower_t and
-                   (float(trade_data[index]['time']) // 1) <= upper_t):
-                bucket.append(trade_data[index])
+                   float(trade_data[index]['time']) <= float(upper_t)):
+                if float(trade_data[index]['time']) >= float(lower_t):
+                    bucket.append(trade_data[index])
                 index += 1
 
             tick = {}

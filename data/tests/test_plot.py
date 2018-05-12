@@ -136,8 +136,8 @@ def plot(ax, r, plot_title, show_legend=False):
 
 if __name__ == '__main__':
     # figure settings
-    fig, axarr = plt.subplots(5, 2, sharex=True, figsize=(14, 12))
-    fig.subplots_adjust(hspace=0, wspace=0,
+    fig, axarr = plt.subplots(4, 2, sharex=True, figsize=(14, 12))
+    fig.subplots_adjust(hspace=0.1, wspace=0.05,
                         left=0.05, right=0.95,
                         top=0.95, bottom=0.15)
     axarr = axarr.flatten()
@@ -146,66 +146,78 @@ if __name__ == '__main__':
     end = end - (end % 60) + 60  # test boundary handling
     start = int(end - 60 * 60 * 3)
 
+    axarr_i = 0
+
     # download data and get chart
     bina = Binance(savedir='test')
     bina_pair = 'ETHUSDT'
     bina.download_data(bina_pair, start, end)
     bina_data = bina.get_charts(bina_pair, start, end, interval=60)
-    plot(axarr[0], bina_data, 'Binance ' + bina_pair, True)
+    plot(axarr[axarr_i], bina_data, 'Binance ' + bina_pair, True)
+    axarr_i += 1
 
     bina = Binance(savedir='test')
     bina_pair = 'BTCUSDT'
     bina.download_data(bina_pair, start, end)
     bina_data = bina.get_charts(bina_pair, start, end, interval=60)
-    plot(axarr[1], bina_data, 'Binance ' + bina_pair)
+    plot(axarr[axarr_i], bina_data, 'Binance ' + bina_pair)
+    axarr_i += 1
 
-    bitm = Bitmex(savedir='test')
-    bitm_pair = 'ETHM18'
-    bitm.download_data(bitm_pair, start, end)
-    bitm_data = bitm.get_charts(bitm_pair, start, end, interval=60)
-    plot(axarr[0], bitm_data, 'Bitmex ' + bitm_pair)
-
-    bitm = Bitmex(savedir='test')
-    bitm_pair = 'XBTUSD'
-    bitm.download_data(bitm_pair, start, end)
-    bitm_data = bitm.get_charts(bitm_pair, start, end, interval=60)
-    plot(axarr[1], bitm_data, 'Bitmex ' + bitm_pair)
+#     bitm = Bitmex(savedir='test')
+#     bitm_pair = 'ETHM18'
+#     bitm.download_data(bitm_pair, start, end)
+#     bitm_data = bitm.get_charts(bitm_pair, start, end, interval=60)
+#     plot(axarr[axarr_i], bitm_data, 'Bitmex ' + bitm_pair)
+#     axarr_i += 1
+#
+#     bitm = Bitmex(savedir='test')
+#     bitm_pair = 'XBTUSD'
+#     bitm.download_data(bitm_pair, start, end)
+#     bitm_data = bitm.get_charts(bitm_pair, start, end, interval=60)
+#     plot(axarr[axarr_i], bitm_data, 'Bitmex ' + bitm_pair)
+#     axarr_i += 1
 
     gdax = Gdax(savedir='test')
     gdax_pair = 'ETH-USD'
     gdax.download_data(gdax_pair, start, end)
     gdax_data = gdax.get_charts(gdax_pair, start, end, interval=60)
-    plot(axarr[0], gdax_data, 'GDAX ' + gdax_pair)
+    plot(axarr[axarr_i], gdax_data, 'GDAX ' + gdax_pair)
+    axarr_i += 1
 
     gdax = Gdax(savedir='test')
     gdax_pair = 'BTC-USD'
     gdax.download_data(gdax_pair, start, end)
     gdax_data = gdax.get_charts(gdax_pair, start, end, interval=60)
-    plot(axarr[1], gdax_data, 'GDAX ' + gdax_pair)
+    plot(axarr[axarr_i], gdax_data, 'GDAX ' + gdax_pair)
+    axarr_i += 1
 
     krak = Kraken(savedir='test')
     krak_pair = 'XETHZUSD'
     krak.download_data(krak_pair, start, end)
     krak_data = krak.get_charts(krak_pair, start, end, interval=60)
-    plot(axarr[2], krak_data, 'Kraken ' + krak_pair)
+    plot(axarr[axarr_i], krak_data, 'Kraken ' + krak_pair)
+    axarr_i += 1
 
     krak = Kraken(savedir='test')
     krak_pair = 'XXBTZUSD'
     krak.download_data(krak_pair, start, end)
     krak_data = krak.get_charts(krak_pair, start, end, interval=60)
-    plot(axarr[3], krak_data, 'Kraken ' + krak_pair)
+    plot(axarr[axarr_i], krak_data, 'Kraken ' + krak_pair)
+    axarr_i += 1
 
     polo = Poloniex(savedir='test')
     polo_pair = 'USDT_ETH'
     polo.download_data(polo_pair, start, end)
     polo_data = polo.get_charts(polo_pair, start, end, interval=60)
-    plot(axarr[4], polo_data, 'Poloniex ' + polo_pair)
+    plot(axarr[axarr_i], polo_data, 'Poloniex ' + polo_pair)
+    axarr_i += 1
 
     polo = Poloniex(savedir='test')
     polo_pair = 'USDT_BTC'
     polo.download_data(polo_pair, start, end)
     polo_data = polo.get_charts(polo_pair, start, end, interval=60)
-    plot(axarr[5], polo_data, 'Poloniex ' + polo_pair)
+    plot(axarr[axarr_i], polo_data, 'Poloniex ' + polo_pair)
+    axarr_i += 1
 
     # draw fig
     fig.canvas.draw()

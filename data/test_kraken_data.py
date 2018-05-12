@@ -1,6 +1,6 @@
 import time
 
-from matplotlib.finance import candlestick2_ohlc
+from mpl_finance import candlestick2_ohlc
 
 from data_manager import DataProcessor
 from kraken_data import Kraken

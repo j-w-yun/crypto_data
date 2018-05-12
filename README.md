@@ -6,6 +6,7 @@
     requests
     numpy
     matplotlib
+    mpl_finance
 
 ## Usage
 

@@ -1,10 +1,10 @@
 import time
 
-from matplotlib.finance import candlestick2_ohlc
+from mpl_finance import candlestick2_ohlc
 
 from data_manager import DataProcessor
+from gdax_data import Gdax
 import matplotlib.pyplot as plt
-from poloniex_data import Poloniex
 import timeutil
 
 
@@ -146,8 +146,8 @@ def plot(ax, r, pair, show_legend):
 
 if __name__ == '__main__':
 
-    client = Poloniex(savedir='test')
-    pair = 'USDT_ETH'
+    client = Gdax(savedir='test')
+    pair = 'ETH-USD'
 
     end = int(time.time())
     end = end - (end % 60) + 60  # test boundary handling

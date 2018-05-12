@@ -1,6 +1,6 @@
 import sys
 
-from matplotlib.finance import candlestick2_ohlc
+from mpl_finance import candlestick2_ohlc
 
 from data_manager import DataManager
 import datalist
@@ -14,12 +14,14 @@ if __name__ == '__main__':
 
     # start UNIX of data
     date_dict = {'year': 2016, 'month': 8, 'day': 1, 'hour': 0, 'minute': 0}
-    start = timeutil.local_date_to_unix(timeutil.date_dict_to_local_date(date_dict))
+    start = timeutil.local_date_to_unix(
+        timeutil.date_dict_to_local_date(date_dict))
     print('Start UNIX: {}'.format(start))
 
     # end UNIX of data
     date_dict = {'year': 2018, 'month': 5, 'day': 9, 'hour': 0, 'minute': 0}
-    end = timeutil.local_date_to_unix(timeutil.date_dict_to_local_date(date_dict))
+    end = timeutil.local_date_to_unix(
+        timeutil.date_dict_to_local_date(date_dict))
     print('End UNIX: {}\n'.format(end))
 
     dm.download_all(start, end, n_proc=64)

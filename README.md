@@ -1,4 +1,6 @@
-# cdata
+# Crypto Data
+
+Deprecated
 
 ## List of Supported Currency Pair Data
 
